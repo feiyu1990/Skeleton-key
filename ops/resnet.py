@@ -17,13 +17,11 @@ UPDATE_OPS_COLLECTION = 'resnet_update_ops'  # must be grouped with training op
 IMAGENET_MEAN_RGB = [123.68, 116.779, 103.939]
 
 
-# model_load = h5py.File('/Users/yuwang/Documents/hierarchical_lstm/to_tf/level1_cnn_param.h5')
-model_load = h5py.File('/Users/yuwang/Documents/hierarchical_lstm/to_tf/best_2level_cnn_param.h5')
+model_load = h5py.File('./model/best_2level_cnn_param.h5')
 
 class ResNet(object):
-    def __init__(self, images):
-        self.images = images
-        # self.tester = tf.placeholder(tf.float32, [None, 56, 56, 64], 'images')
+    def __init__(self):
+        self.images = tf.placeholder(tf.float32, [None, 224, 224, 3], 'images')
         self.features = None
 
     def _get_variable(self, name, shape, initializer, weight_decay=0.0, dtype='float', trainable=True):
@@ -61,8 +59,6 @@ class ResNet(object):
                                                initializer=tf.constant(params_init['running_mean']), trainable=False)
         moving_variance = self._get_variable_const('moving_variance',
                                                    initializer=tf.constant(params_init['running_var']), trainable=False)
-        # print np.mean(params_init['running_var'])
-        # These ops will only be preformed when training.
         mean, variance = tf.nn.moments(x, axis)
         update_moving_mean = moving_averages.assign_moving_average(moving_mean, mean, BN_DECAY)
         update_moving_variance = moving_averages.assign_moving_average(moving_variance, variance, BN_DECAY)
@@ -75,7 +71,6 @@ class ResNet(object):
         x = tf.nn.batch_normalization(x, mean, variance, beta, gamma, BN_EPSILON)
         return x
 
-    # should be transformed to (2, 3, 1, 0)
     def _conv(self, x, params_init, stride):
         weights = self._get_variable_const('weights', initializer=tf.constant(params_init['weight']),
                                            weight_decay=CONV_WEIGHT_DECAY)
@@ -154,6 +149,7 @@ class ResNet(object):
     def build_model(self, is_training):
         h = (self.images - np.array(IMAGENET_MEAN_RGB))
         h = tf.divide(h, 255)
+        self.testtest = h
         with tf.variable_scope('resnet/block1'):
             h = self._conv(x=h,
                            params_init={'bias': model_load['cnn1/bias'][:],

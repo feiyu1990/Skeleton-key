@@ -7,7 +7,7 @@ from ops import resnet, level1_model
 
 class Level1Model(object):
 
-    def __init__(self, config, mode, h5_name, train_resnet=False):
+    def __init__(self, config, mode, train_resnet=False):
         self.config = config
         self.mode = mode
         self.train_resnet = (train_resnet & (mode == 'training'))
@@ -15,8 +15,6 @@ class Level1Model(object):
         self.weight_initializer = tf.contrib.layers.xavier_initializer()
         self.const_initializer = tf.constant_initializer(0.0)
         self.emb_initializer = tf.random_uniform_initializer(minval=-1.0, maxval=1.0)
-        # self.images = None
-        # self.input_seqs = None
         self.level1_word2ix = json.load(open('data/train/word2ix.json'))
 
         self.resnet = resnet.ResNet()
@@ -25,8 +23,7 @@ class Level1Model(object):
                                                      dim_embed=config.LEVEL1_dim_embed,
                                                      dim_hidden=config.LEVEL1_dim_hidden,
                                                      alpha_c=config.LEVEL1_alpha, dropout=config.LEVEL1_dropout,
-                                                     n_time_step=config.LEVEL1_T,
-                                                     h5_name=h5_name)
+                                                     n_time_step=config.LEVEL1_T)
 
     def build(self):
         self.resnet.build_model(is_training=self.train_resnet)

@@ -1,47 +1,50 @@
 import numpy as np
 import cPickle as pickle
-import hickle
+# import hickle
 import time
 import os
 import h5py
 import json
+import random
 
-def load_coco_data_dep(data_path='./data', split='train'):
-    data_path = os.path.join(data_path, split)
-    start_t = time.time()
-    data = {}
-  
-    data['features'] = hickle.load(os.path.join(data_path, '%s.features.hkl' %split))
-    with open(os.path.join(data_path, '%s.file.names.pkl' %split), 'rb') as f:
-        data['file_names'] = pickle.load(f)   
-    with open(os.path.join(data_path, '%s.captions.pkl' %split), 'rb') as f:
-        data['captions'] = pickle.load(f)
-    with open(os.path.join(data_path, '%s.image.idxs.pkl' %split), 'rb') as f:
-        data['image_idxs'] = pickle.load(f)
-            
-    if split == 'train':       
-        with open(os.path.join(data_path, 'word_to_idx.pkl'), 'rb') as f:
-            data['word_to_idx'] = pickle.load(f)
-          
-    for k, v in data.iteritems():
-        if type(v) == np.ndarray:
-            print k, type(v), v.shape, v.dtype
-        else:
-            print k, type(v), len(v)
-    end_t = time.time()
-    print "Elapse time: %.2f" %(end_t - start_t)
-    return data
+# def load_coco_data_dep(data_path='./data', split='train'):
+#     data_path = os.path.join(data_path, split)
+#     start_t = time.time()
+#     data = {}
+#
+#     data['features'] = hickle.load(os.path.join(data_path, '%s.features.hkl' %split))
+#     with open(os.path.join(data_path, '%s.file.names.pkl' %split), 'rb') as f:
+#         data['file_names'] = pickle.load(f)
+#     with open(os.path.join(data_path, '%s.captions.pkl' %split), 'rb') as f:
+#         data['captions'] = pickle.load(f)
+#     with open(os.path.join(data_path, '%s.image.idxs.pkl' %split), 'rb') as f:
+#         data['image_idxs'] = pickle.load(f)
+#
+#     if split == 'train':
+#         with open(os.path.join(data_path, 'word_to_idx.pkl'), 'rb') as f:
+#             data['word_to_idx'] = pickle.load(f)
+#
+#     for k, v in data.iteritems():
+#         if type(v) == np.ndarray:
+#             print k, type(v), v.shape, v.dtype
+#         else:
+#             print k, type(v), len(v)
+#     end_t = time.time()
+#     print "Elapse time: %.2f" %(end_t - start_t)
+#     return data
 
 
 def load_coco_data(data_path='./data', split='train'):
     data_path = os.path.join(data_path, split)
     start_t = time.time()
     data = {}
-    data['features'] = h5py.File(os.path.join(data_path, '%s.features.h5' % split))['feature']
     f = h5py.File(os.path.join(data_path, '%s.data.h5' % split))
+    data['features'] = f['feature']
     data['file_names'] = f['file_names']
-    data['img_idxs'] = f['img_idxs']
-    data['captions'] = f['captions']
+    if 'img_idxs' in f:
+        data['img_idxs'] = f['img_idxs']
+    if 'captions' in f:
+        data['captions'] = f['captions']
 
     # with open(os.path.join(data_path, '%s.file.names.pkl' % split), 'rb') as f:
     #     data['file_names'] = pickle.load(f)
@@ -50,9 +53,9 @@ def load_coco_data(data_path='./data', split='train'):
     # with open(os.path.join(data_path, '%s.image.idxs.pkl' % split), 'rb') as f:
     #     data['image_idxs'] = pickle.load(f)
 
-    if split == 'train':
-        with open(os.path.join(data_path, 'word2ix.json'), 'rb') as f:
-            data['word_to_idx'] = json.load(f)
+    # if split == 'train':
+    #     with open(os.path.join(data_path, 'word2ix.json'), 'rb') as f:
+    #         data['word_to_idx'] = json.load(f)
 
     for k, v in data.iteritems():
         if type(v) == np.ndarray:
@@ -64,14 +67,13 @@ def load_coco_data(data_path='./data', split='train'):
     return data
 
 
-def decode_captions(captions, idx_to_word):
+def decode_helper(captions, idx_to_word):
     if captions.ndim == 1:
         T = captions.shape[0]
         N = 1
     else:
         N, T = captions.shape
-
-    decoded = []
+    words_all = []
     for i in range(N):
         words = []
         for t in range(T):
@@ -84,8 +86,25 @@ def decode_captions(captions, idx_to_word):
                 break
             if word != 'NULL':
                 words.append(word)
-        decoded.append(' '.join(words))
-    return decoded
+        words_all.append(words)
+    return words_all
+
+
+def decode_captions(captions, idx_to_word):
+    return [' '.join(words) for words in decode_helper(captions, idx_to_word)]
+
+
+def decode_captions_2level(level1_cap, level2_cap, level1_idx2word, level2_idx2word):
+    first_levels = decode_helper(level1_cap, level1_idx2word)
+    decodes = []
+    for first_level, second_level in zip(first_levels, level2_cap):
+        attrs_decoded = decode_helper(second_level, level2_idx2word)
+        decode_this = []
+        for i, first_word in enumerate(first_level):
+            decode_this.extend(attrs_decoded[i])
+            decode_this.append(first_word)
+        decodes.append(' '.join(decode_this))
+    return decodes
 
 
 def sample_coco_minibatch(data, batch_size):
@@ -129,3 +148,19 @@ def save_pickle(data, path):
     with open(path, 'wb') as f:
         pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
         print ('Saved %s..' %path)
+
+
+def crop_image(data, training):
+    n_data = data.shape[0]
+    # new_data = None
+    if not training:
+        # central crop
+        start = (256-224)/2-1
+        new_data = data[:, start:224+start, start:224+start, :]
+    else:
+        new_data = np.zeros((n_data, 224, 224, 3), dtype=np.float32)
+        for i in xrange(n_data):
+            start_x = random.randint(0, 256 - 224)
+            start_y = random.randint(0, 256 - 224)
+            new_data[i, :, :, :] = data[i, start_x:start_x+224, start_y:start_y+224, :]
+    return new_data

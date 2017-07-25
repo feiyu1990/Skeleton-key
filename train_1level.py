@@ -1,14 +1,13 @@
 import tensorflow as tf
 from utils import *
-from model_stem import Level1Model
+from model_level1 import Level1Model
 from beam_search import CaptionGenerator
 import config
 
 def main():
     model = Level1Model(config, mode='training', train_resnet=config.train_resnet)
-
-    data = load_coco_data(data_path='./data', split='testtest')
-    val_data = load_coco_data(data_path='./data', split='testtest')
+    data = load_coco_data(data_path='./data', split='train')
+    val_data = load_coco_data(data_path='./data', split='val')
 
     # update_rule = 'adam'
     optimizer = tf.train.AdamOptimizer
@@ -38,7 +37,7 @@ def main():
     n_iters_val = int(np.ceil(float(val_features.shape[0]) / config.batch_size))
 
     with tf.name_scope('optimizer'):
-        optimizer = optimizer(learning_rate=4e-6)
+        optimizer = optimizer(learning_rate=0.000000004)
         optim_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='level1')
         level1_grads = tf.gradients(loss, optim_vars)
         # for i, j in zip(level1_grads, optim_vars):
@@ -87,17 +86,16 @@ def main():
 
         for e in range(config.n_epochs):
             rand_idxs = np.random.permutation(n_examples)
-            # print captions.shape, image_idxs.shape
-            # print captions
             captions = captions[rand_idxs]
-            # print rand_idxs
-            # print captions
+            features = features[rand_idxs]
             image_idxs = image_idxs[rand_idxs]
 
             for i in range(n_iters_per_epoch):
                 captions_batch = captions[i * config.batch_size:(i + 1) * config.batch_size]
+                print decode_captions(captions_batch, model.level1_model.idx_to_word)
                 image_idxs_batch = image_idxs[i * config.batch_size:(i + 1) * config.batch_size]
-                img_batch = features[image_idxs_batch]
+                print image_idxs_batch
+                img_batch = crop_image(features[i * config.batch_size:(i + 1) * config.batch_size], True)
                 print img_batch.shape
                 img_feature = sess.run(model.resnet.features, {model.resnet.images: img_batch})
                 print img_feature.shape
@@ -106,7 +104,7 @@ def main():
                 _, l = sess.run([train_op, loss], feed_dict)
                 curr_loss += l
 
-                # write summary for tensorboard visualization
+                #write summary for tensorboard visualization
                 if i % 10 == 0:
                     summary = sess.run(summary_op, feed_dict)
                     summary_writer.add_summary(summary, e * n_iters_per_epoch + i)
@@ -117,9 +115,10 @@ def main():
                     decoded = decode_captions(ground_truths, model.level1_model.idx_to_word)
                     for j, gt in enumerate(decoded):
                         print "Ground truth %d: %s" % (j + 1, gt)
-                    print img_batch.shape
-                    generator.beam_search(sess, img_batch[0,:,:,:])
-                    print "Generated caption: %s\n" % generator
+                    # print img_batch.shape
+                    predicted = generator.beam_search(sess, img_batch[0:1,:,:,:])
+                    decoded_predict = decode_captions(np.asarray(predicted), model.level1_model.idx_to_word)
+                    print "Generated caption: %s\n" % decoded_predict
 
             print "Previous epoch loss: ", prev_loss
             print "Current epoch loss: ", curr_loss
@@ -127,7 +126,7 @@ def main():
             prev_loss = curr_loss
             curr_loss = 0
 
-            # # print out BLEU scores and file write
+            # print out BLEU scores and file write
             # if config.print_bleu:
             #     all_gen_cap = np.ndarray((val_features.shape[0], 20))
             #     for i in range(n_iters_val):

@@ -7,7 +7,7 @@ import numpy as np
 
 class Level1Model(object):
     def __init__(self, word_to_idx, dim_feature=[49, 512], dim_embed=512, dim_hidden=1800,
-                 n_time_step=16, alpha_c=0.0, dropout=True):
+                 n_time_step=16, alpha_c=0.0, dropout=True, h5_name='./model/best_2level_lm_param.h5'):
         self.word_to_idx = word_to_idx
         self.idx_to_word = {i: w for w, i in word_to_idx.iteritems()}
         self.alpha_c = alpha_c
@@ -27,7 +27,6 @@ class Level1Model(object):
         self.captions = tf.placeholder(tf.int32, [None, self.T + 1])
         self.features = tf.placeholder(tf.float32, [None, 7, 7, 2048])
 
-
         self.init_c = None
         self.init_h = None
         self.features_proj = None
@@ -42,7 +41,7 @@ class Level1Model(object):
         self.h_feed = None
         self.in_word = None
 
-        self.model_load = h5py.File('/Users/yuwang/Documents/hierarchical_lstm/to_tf/best_2level_lm_param.h5')
+        self.model_load = h5py.File(h5_name)
 
         w_numpy_pre = self.model_load['/lookup_table/weight'][:]
         w_numpy = np.zeros((w_numpy_pre.shape[0] + 2, w_numpy_pre.shape[1]))
@@ -61,8 +60,8 @@ class Level1Model(object):
             b_1 = tf.get_variable('w_b1', initializer=self.model_load['/init_network/bias1'][:])
             h1 = tf.nn.relu(tf.matmul(features_mean, w_1) + b_1)
             # todo: this dropout can be added later
-            if self.dropout:
-                h1 = tf.nn.dropout(h1, 0.5)
+            # if self.dropout:
+            # h1 = tf.nn.dropout(h1, 0.5)
 
             w_h = tf.get_variable('w_h', initializer=w2_init[:, self.H:])
             b_h = tf.get_variable('b_h', initializer=b2_init[self.H:])
@@ -207,9 +206,9 @@ class Level1Model(object):
             w_ctx = tf.get_variable('w_ctx', initializer=w_ctx_)
             b_ctx = tf.get_variable('b_ctx', initializer=b_ctx_)
 
-            if dropout:
+            # if dropout:
                 # h --> top_h
-                h = tf.nn.dropout(h, 0.5)
+                # h = tf.nn.dropout(h, 0.5)
 
             # h_logits --> h_out
             h_logits = tf.matmul(h, w_h) + b_h
@@ -224,9 +223,9 @@ class Level1Model(object):
             # h_logits --> out_sum_acti
             h_logits = tf.nn.tanh(h_logits)
 
-            if dropout:
+            # if dropout:
                 # h_logits --> out_sum_dropout
-                h_logits = tf.nn.dropout(h_logits, 0.5)
+                # h_logits = tf.nn.dropout(h_logits, 0.5)
 
             # out_logits --> proj
             out_logits = tf.matmul(h_logits, w_out) + b_out
@@ -271,20 +270,18 @@ class Level1Model(object):
         captions_out = captions[:, 1:]
         mask = tf.to_float(tf.not_equal(captions_out, self._null))
         captions_out -= 1 # this is crucial. The target caption includes <0> as null, while the output of the model doesn's include that.
+        captions_out = tf.clip_by_value(captions_out, 0, 100000)
         alpha_list = []
 
-        features_encode = self._cnn_encoding(features=self.features)
-        c, h = self._get_initial_lstm(features=features_encode)
-        features_proj = self._project_features(features=features_encode)
-        x = self._word_embedding(inputs=captions_in)
+        x = self._word_embedding(inputs=captions_in, reuse=True)
 
         for t in range(16):
-            context_pre, alpha = self._attention_layer(features_encode, features_proj, h, reuse=(t != 0))
+            context_pre, alpha = self._attention_layer(self.features_encode, self.features_proj, self.init_h, reuse=True)
             alpha_list.append(alpha)
-            context, beta = self._selector(context_pre, h, reuse=(t != 0))
+            context, beta = self._selector(context_pre, self.init_h, reuse=True)
 
-            (c, h) = self._lstm(h, c, x[:,t,:], context, reuse=(t != 0))
-            logits = self._decode_lstm(x[:,t,:], h, context, reuse=(t != 0))
+            (c, h) = self._lstm(self.init_h, self.init_c, x[:,t,:], context, reuse=True)
+            logits = self._decode_lstm(x[:,t,:], h, context, reuse=True)
 
             self.loss += tf.reduce_sum(
                 tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=captions_out[:, t]) * mask[:, t])

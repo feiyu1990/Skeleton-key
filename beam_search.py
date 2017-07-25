@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Class for generating captions from an image-to-text model."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -23,8 +22,6 @@ import numpy as np
 from utils import *
 
 class Caption(object):
-    """Represents a complete or partial caption."""
-
     def __init__(self, sentence, c, h, logprob, score, embeds=None, contexts=None, hiddens=None, info=True):
         """Initializes the Caption.
         Args:
@@ -104,7 +101,6 @@ class TopN(object):
 
 
 class CaptionGenerator(object):
-    """Class to generate captions from an image-to-text model."""
 
     def __init__(self,
                  model,
@@ -114,19 +110,6 @@ class CaptionGenerator(object):
                  length_normalization_factor=0.0,
                  encourage_1level=0.0, encourage_2level=0.0,
                  level2=True):
-        """Initializes the generator.
-        Args:
-          model: Object encapsulating a trained image-to-text model. Must have
-            methods feed_image() and inference_step(). For example, an instance of
-            InferenceWrapperBase.
-          vocab: A Vocabulary object.
-          beam_size: Beam size to use when generating captions.
-          max_caption_length: The maximum caption length before stopping the search.
-          length_normalization_factor: If != 0, a number x such that captions are
-            scored by logprob/length^x, rather than logprob. This changes the
-            relative scores of captions depending on their lengths. For example, if
-            x > 0 then longer captions will be favored.
-        """
         self.vocab_1level = vocab_1level
         self.vocab_2level = vocab_2level
         self.model = model
@@ -141,13 +124,6 @@ class CaptionGenerator(object):
         self.level2 = level2
 
     def beam_search(self, sess, img):
-        """Runs beam search caption generation on a single image.
-        Args:
-          sess: TensorFlow Session object.
-          encoded_image: An encoded image string.
-        Returns:
-          A list of Caption sorted by descending score.
-        """
         resnet = self.model.resnet
         level1 = self.model.level1_model
 
@@ -217,9 +193,6 @@ class CaptionGenerator(object):
                 # We have run out of partial candidates; happens when beam_size = 1.
                 break
 
-        # If we have no complete captions then fall back to the partial captions.
-        # But never output a mixture of complete and partial captions because a
-        # partial caption could have a higher score than all the complete captions.
         if not complete_captions.size():
             complete_captions = partial_captions
 
@@ -233,8 +206,6 @@ class CaptionGenerator(object):
             for caption in level1_top_captions:
                 sentence_level1 = caption.sentence[1:]
                 embeds, contexts, hiddens = caption.embeds, caption.contexts, caption.hiddens
-                # print sentence_level1
-                # print decode_captions(np.squeeze(np.asarray(sentence_level1)), level1.idx_to_word)
                 words_level1 = decode_captions(np.squeeze(np.asarray(sentence_level1)), level1.idx_to_word)[0].split(' ')
                 attrs_level2 = []
                 for t_level1 in xrange(len(embeds)):
@@ -284,13 +255,11 @@ class CaptionGenerator(object):
                                     beam = Caption(sentence, c[i], h[i], logprob, score, info=False)
                                     partial_captions.push(beam)
                         if partial_captions.size() == 0:
-                            # We have run out of partial candidates; happens when beam_size = 1.
                             break
                     if not complete_captions.size():
                         complete_captions = partial_captions
                     attr = decode_captions(np.squeeze(np.asarray(complete_captions.extract(sort=True)[0].sentence))[1:], level2.idx_to_word)
                     attrs_level2.extend(attr)
-                # print words_level1, attrs_level2
                 full_sentence.append(' '.join([i + ' ' + j if i != '' else j for (j, i) in zip(words_level1, attrs_level2)]))
         else:
             full_sentence = [i.sentence[1:] for i in level1_top_captions]

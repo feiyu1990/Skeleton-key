@@ -9,20 +9,6 @@ import numpy as np
 class Level2Model(object):
     def __init__(self, word_to_idx, dim_feature = 2048, dim_prev_emb = 512, dim_prev_cont = 2048, dim_prev_hidd = 1800,
                  dim_embed=512, dim_hidden=1024, n_time_step=6, dropout=True):
-        """
-        Args:
-            word_to_idx: word-to-index mapping dictionary.
-            dim_feature: (optional) Dimension of vggnet19 conv5_3 feature vectors.
-            dim_embed: (optional) Dimension of word embedding.
-            dim_hidden: (optional) Dimension of all hidden state.
-            n_time_step: (optional) Time step size of LSTM. 
-            prev2out: (optional) previously generated word to hidden state. (see Eq (7) for explanation)
-            ctx2out: (optional) context to hidden state (see Eq (7) for explanation)
-            alpha_c: (optional) Doubly stochastic regularization coefficient. (see Section (4.2.1) for explanation)
-            selector: (optional) gating scalar for context vector. (see Section (4.2.1) for explanation)
-            dropout: (optional) If true then dropout layer is added.
-        """
-        
         self.word_to_idx = word_to_idx
         self.idx_to_word = {i: w for w, i in word_to_idx.iteritems()}
         self.dropout = dropout
@@ -39,7 +25,7 @@ class Level2Model(object):
         self.embedding = tf.placeholder(tf.float32, [None, dim_prev_emb])
         self.context = tf.placeholder(tf.float32, [None, dim_prev_cont])
         self.hidden = tf.placeholder(tf.float32, [None, dim_prev_hidd])
-        self.model_load = h5py.File('/Users/yuwang/Documents/hierarchical_lstm/to_tf/best_2level_attrlm_param.h5')
+        self.model_load = h5py.File('model/best_2level_attrlm_param.h5')
 
         self.init_c = None
         self.init_h = None
@@ -109,9 +95,9 @@ class Level2Model(object):
             w_out = tf.get_variable('w_out', initializer=w_out_)
             b_out = tf.get_variable('b_out', initializer=b_out_)
 
-            if dropout:
+            # if dropout:
                 # h --> top_h
-                h = tf.nn.dropout(h, 0.5)
+                # h = tf.nn.dropout(h, 0.5)
 
             # h_logits --> h_out
             out_logits = tf.matmul(h, w_out) + b_out
@@ -125,15 +111,14 @@ class Level2Model(object):
         features = self._cnn_encoding(embedding=embed, context=context, hidden=hidden)
         c = tf.zeros([tf.shape(self.context)[0], self.H])
         h = tf.zeros([tf.shape(self.context)[0], self.H])
-        (zeros_c, zero_h) = self._lstm(h, c, features, reuse=False)
-
-        x0 = self._word_embedding(inputs=tf.fill([tf.shape(features)[0]], self._start))
-        (self.init_c, self.init_h) = self._lstm(zero_h, zeros_c, x0, reuse=True)
+        (self.init_c, self.init_h) = self._lstm(h, c, features, reuse=False)
         _ = self._decode_lstm(self.init_h)
+        _ = self._word_embedding(inputs=tf.fill([tf.shape(features)[0]], self._start))
+
+        self.in_word = tf.placeholder(tf.int32, [None])
+        x = self._word_embedding(inputs=self.in_word, reuse=True)
 
         self.c_feed = tf.placeholder(tf.float32, [None, self.H])
         self.h_feed = tf.placeholder(tf.float32, [None, self.H])
-        self.in_word = tf.placeholder(tf.int32, [None])
-        x = self._word_embedding(inputs=self.in_word, reuse=True)
         (self.c, self.h) = self._lstm(self.h_feed, self.c_feed, x, reuse=True)
         self.log_softmax = self._decode_lstm(self.h, reuse=True)

@@ -14,17 +14,11 @@ class HierarchicalModel(object):
         self.weight_initializer = tf.contrib.layers.xavier_initializer()
         self.const_initializer = tf.constant_initializer(0.0)
         self.emb_initializer = tf.random_uniform_initializer(minval=-1.0, maxval=1.0)
-        self.images = None
-        self.input_seqs = None
-        # self.img_features = None
-        # self.features_proj = None
-
-        self.images = tf.placeholder(tf.float32, [None, 224, 224, 3], 'images')
 
         self.level1_word2ix = json.load(open('data/train/word2ix_stem.json'))
         self.level2_word2ix = json.load(open('data/train/word2ix_attr.json'))
 
-        self.resnet = resnet.ResNet(images=self.images)
+        self.resnet = resnet.ResNet()
         self.level1_model = level1_model.Level1Model(word_to_idx=self.level1_word2ix,
                                                      dim_feature=config.LEVEL1_dim_feature,
                                                      dim_embed=config.LEVEL1_dim_embed,
