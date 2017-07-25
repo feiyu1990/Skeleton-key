@@ -150,10 +150,9 @@ class CaptionGenerator(object):
         """
         resnet = self.model.resnet
         level1 = self.model.level1_model
-        level2 = self.model.level2_model
 
         # feed image into resnet and get image features
-        img_feature = sess.run(resnet.features, feed_dict={self.model.images: img})
+        img_feature = sess.run(resnet.features, feed_dict={resnet.images: img})
 
         # level1 (skeleton)
         (init_c, init_h, features_encode, features_proj) = sess.run(
@@ -191,10 +190,13 @@ class CaptionGenerator(object):
                 # For this partial caption, get the beam_size most probable next words.
                 words_and_probs = list(enumerate(word_probabilities, start=1))
                 words_and_probs.sort(key=lambda x: -x[1])
-                words_and_probs = words_and_probs[0:self.beam_size_1level]
+                words_and_probs = words_and_probs[:self.beam_size_1level]
                 # Each next word gives a new partial caption.
                 for w, logp in words_and_probs:
-                    embed = sess.run(level1.embed4next, feed_dict={level1.word_feed: np.array([w])})
+                    if self.level2:
+                        embed = sess.run(level1.embed4next, feed_dict={level1.word_feed: np.array([w])})
+                    else:
+                        embed = None
                     sentence = partial_caption.sentence + [w]
                     logprob = partial_caption.logprob + logp
                     score = logprob
@@ -226,6 +228,7 @@ class CaptionGenerator(object):
         full_sentence = []
 
         if self.level2:
+            level2 = self.model.level2_model
             # level2 (attributes)
             for caption in level1_top_captions:
                 sentence_level1 = caption.sentence[1:]
@@ -288,10 +291,7 @@ class CaptionGenerator(object):
                     attr = decode_captions(np.squeeze(np.asarray(complete_captions.extract(sort=True)[0].sentence))[1:], level2.idx_to_word)
                     attrs_level2.extend(attr)
                 # print words_level1, attrs_level2
-
-                print ' '.join([j if i == '' else i + ' ' + j for (j, i) in zip(words_level1, attrs_level2)])
-                full_sentence.append(' '.join([i + ' ' + j for (j, i) in zip(words_level1, attrs_level2)]))
+                full_sentence.append(' '.join([i + ' ' + j if i != '' else j for (j, i) in zip(words_level1, attrs_level2)]))
         else:
-            full_sentence = [i[1:] for i in level1_top_captions]
-            print full_sentence
+            full_sentence = [i.sentence[1:] for i in level1_top_captions]
         return full_sentence[0]
