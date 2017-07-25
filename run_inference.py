@@ -18,7 +18,7 @@ def main():
     second_level_label_start_ix = data['label_start_ix']
     second_level_label_end_ix = data['label_end_ix']
     # second_level_label_pos = data['label_position']
-    second_level_labels = data['labels']
+    second_level_labels = data['idx']
     generator = CaptionGenerator(model, model.level1_word2ix, model.level2_word2ix,
                                  beam_size_1level=5, beam_size_2level=2,
                                  encourage_1level=0.1, encourage_2level=0.9)

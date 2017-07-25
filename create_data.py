@@ -14,6 +14,11 @@ import os
 sent_parser = StanfordParser(model_path="edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz")
 st = StanfordPOSTagger('english-bidirectional-distsim.tagger')
 data_root = './data/'
+if not os.path.exists(data_root):
+    os.mkdir(data_root)
+for val_name in ['train', 'val', 'test']:
+    if not os.path.exists(os.path.join(data_root, val_name)):
+        os.mkdir(os.path.join(data_root, val_name))
 
 def prepro(sent):
     temp = str(sent).lower().translate(None, string.punctuation).strip()
