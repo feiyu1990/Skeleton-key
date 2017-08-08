@@ -13,7 +13,8 @@ LEVEL2_dropout = True
 
 # training details
 batch_size = 1
-n_epochs = 1
+n_epochs = 2
 print_every = 1
 print_bleu = True
 train_resnet = True
+save_every = 100

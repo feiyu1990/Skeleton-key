@@ -3,11 +3,12 @@ from __future__ import division
 import tensorflow as tf
 import h5py
 import numpy as np
+from resnet import *
 
 
 class Level1Model(object):
     def __init__(self, word_to_idx, dim_feature=[49, 512], dim_embed=512, dim_hidden=1800,
-                 n_time_step=16, alpha_c=0.0, dropout=True, h5_name='./model/best_2level_lm_param.h5'):
+                 n_time_step=16, alpha_c=0.0, dropout=True, h5_name='./model/best_2level_lm_param.h5', train=True):
         self.word_to_idx = word_to_idx
         self.idx_to_word = {i: w for w, i in word_to_idx.iteritems()}
         self.alpha_c = alpha_c
@@ -22,10 +23,16 @@ class Level1Model(object):
         self._null = word_to_idx['NULL']
         self._eos = word_to_idx['EOS']
         self.loss = 0.0
+        self.train = train
+
+        self.resnet = ResNet()
 
         # Place holder for features and captions
         self.captions = tf.placeholder(tf.int32, [None, self.T + 1])
-        self.features = tf.placeholder(tf.float32, [None, 7, 7, 2048])
+        self.c_feed = tf.placeholder(tf.float32, [None, self.H])
+        self.h_feed = tf.placeholder(tf.float32, [None, self.H])
+        self.in_word = tf.placeholder(tf.int32, [None])
+        self.word_feed = tf.placeholder(tf.int32, [None])
 
         self.init_c = None
         self.init_h = None
@@ -37,9 +44,11 @@ class Level1Model(object):
         self.log_softmax0 = None
         self.c0 = None
         self.h0 = None
-        self.c_feed = None
-        self.h_feed = None
-        self.in_word = None
+
+        self.alpha0 = None
+        self.context4next0 = None
+        self.context4next = None
+        self.embed4next = None
 
         self.model_load = h5py.File(h5_name)
 
@@ -233,7 +242,8 @@ class Level1Model(object):
             return out_logits
 
     def init_inference(self):
-        self.features_encode = self._cnn_encoding(features=self.features)
+        self.resnet.build_model(is_training=self.train)
+        self.features_encode = self._cnn_encoding(features=self.resnet.features)
         self.init_c, self.init_h = self._get_initial_lstm(features=self.features_encode)
         self.features_proj = self._project_features(features=self.features_encode)
 
@@ -244,23 +254,18 @@ class Level1Model(object):
         (self.c0, self.h0) = self._lstm(self.init_h, self.init_c, x, context, reuse=False)
         self.log_softmax0 = tf.nn.log_softmax(self._decode_lstm(x, self.h0, context, reuse=False))
         self.context4next0 = tf.reduce_sum(
-            tf.reshape(self.features, [-1, self.L, tf.shape(self.features)[-1]]) * tf.expand_dims(self.alpha0, 2), 1)
+            tf.reshape(self.resnet.features, [-1, self.L, tf.shape(self.resnet.features)[-1]]) * tf.expand_dims(self.alpha0, 2), 1)
 
     def inference_rest(self):
-        self.c_feed = tf.placeholder(tf.float32, [None, self.H])
-        self.h_feed = tf.placeholder(tf.float32, [None, self.H])
-        self.in_word = tf.placeholder(tf.int32, [None])
-
         x = self._word_embedding(inputs=self.in_word, reuse=True)
         context_pre, self.alpha = self._attention_layer(self.features_encode, self.features_proj, self.h_feed, reuse=True)
         context, beta = self._selector(context_pre, self.h_feed, reuse=True)
         (self.c, self.h) = self._lstm(self.h_feed, self.c_feed, x, context, reuse=True)
         self.log_softmax = tf.nn.log_softmax(self._decode_lstm(x, self.h, context, reuse=True))
         self.context4next = tf.reduce_sum(
-            tf.reshape(self.features, [-1, self.L, tf.shape(self.features)[-1]]) * tf.expand_dims(self.alpha, 2), 1)
+            tf.reshape(self.resnet.features, [-1, self.L, tf.shape(self.resnet.features)[-1]]) * tf.expand_dims(self.alpha, 2), 1)
 
     def build_info_for2layer(self):
-        self.word_feed = tf.placeholder(tf.int32, [None])
         self.embed4next = tf.reshape(self._word_embedding(inputs=self.word_feed, reuse=True), (-1,))
 
     # used for training
@@ -274,17 +279,21 @@ class Level1Model(object):
         alpha_list = []
 
         x = self._word_embedding(inputs=captions_in, reuse=True)
-
+        local_loss = 0
+        c = self.init_c
+        h = self.init_h
+        predict_list = []
         for t in range(16):
-            context_pre, alpha = self._attention_layer(self.features_encode, self.features_proj, self.init_h, reuse=True)
+            context_pre, alpha = self._attention_layer(self.features_encode, self.features_proj, h, reuse=True)
             alpha_list.append(alpha)
-            context, beta = self._selector(context_pre, self.init_h, reuse=True)
+            context, beta = self._selector(context_pre, h, reuse=True)
 
-            (c, h) = self._lstm(self.init_h, self.init_c, x[:,t,:], context, reuse=True)
-            logits = self._decode_lstm(x[:,t,:], h, context, reuse=True)
-
-            self.loss += tf.reduce_sum(
+            (c, h) = self._lstm(h, c, x[:, t, :], context, reuse=True)
+            logits = self._decode_lstm(x[:, t, :], h, context, reuse=True)
+            predict_list.append(tf.nn.top_k(logits)[1])
+            local_loss += tf.reduce_sum(
                 tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=captions_out[:, t]) * mask[:, t])
+        self.loss += local_loss / tf.reduce_sum(mask)
         if self.alpha_c > 0:
             alphas = tf.transpose(tf.stack(alpha_list), (1, 0, 2))
             alphas_all = tf.reduce_sum(alphas, 1)

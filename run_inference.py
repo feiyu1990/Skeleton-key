@@ -18,7 +18,7 @@ def main():
     second_level_label_start_ix = data['label_start_ix']
     second_level_label_end_ix = data['label_end_ix']
     # second_level_label_pos = data['label_position']
-    second_level_labels = data['idx']
+    second_level_labels = data['labels']
     generator = CaptionGenerator(model, model.level1_word2ix, model.level2_word2ix,
                                  beam_size_1level=5, beam_size_2level=2,
                                  encourage_1level=0.1, encourage_2level=0.9)
@@ -41,7 +41,7 @@ def main():
             decoded = decode_captions_2level(first_level_this, second_level_this, model.level1_model.idx_to_word, model.level2_model.idx_to_word)
             print decoded
             result.append({'image_id': int(idx[i]), 'caption': prediction})
-    json.dump(result, open('./data/test/result.json','w'))
+    json.dump(result, open('./data/test/result_resnet_tf.json','w'))
 
 if __name__ == "__main__":
     main()

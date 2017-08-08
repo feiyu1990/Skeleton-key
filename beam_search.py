@@ -124,16 +124,16 @@ class CaptionGenerator(object):
         self.level2 = level2
 
     def beam_search(self, sess, img):
-        resnet = self.model.resnet
+        # resnet = self.model.resnet
         level1 = self.model.level1_model
 
         # feed image into resnet and get image features
-        img_feature = sess.run(resnet.features, feed_dict={resnet.images: img})
+        # img_feature = sess.run(resnet.features, feed_dict={resnet.images: img})
 
         # level1 (skeleton)
         (init_c, init_h, features_encode, features_proj) = sess.run(
             [level1.init_c, level1.init_h, level1.features_encode, level1.features_proj],
-            feed_dict = {level1.features: img_feature})
+            feed_dict = {level1.resnet.images: img})
 
         initial_beam = Caption(
             sentence=[self.vocab_1level['START']],
@@ -154,11 +154,11 @@ class CaptionGenerator(object):
             c_feed = np.reshape(np.array([c.c for c in partial_captions_list]), (-1, level1.H))
             if t == 0:
                 (c, h, log_softmax, alpha, context) = sess.run([level1.c0, level1.h0, level1.log_softmax0, level1.alpha0, level1.context4next0],
-                                               feed_dict={level1.features: img_feature})
+                                               feed_dict={level1.resnet.images: img})
             else:
                 (c, h, log_softmax, alpha, context) = sess.run([level1.c, level1.h, level1.log_softmax, level1.alpha, level1.context4next],
                                                       feed_dict={level1.c_feed: c_feed, level1.h_feed: h_feed,
-                                                                 level1.in_word: input_feed, level1.features: img_feature})
+                                                                 level1.in_word: input_feed, level1.resnet.images: img})
 
             for i, partial_caption in enumerate(partial_captions_list):
                 word_probabilities = log_softmax[i]
@@ -204,7 +204,7 @@ class CaptionGenerator(object):
             level2 = self.model.level2_model
             # level2 (attributes)
             for caption in level1_top_captions:
-                sentence_level1 = caption.sentence[1:]
+                sentence_level1 = caption.sentence
                 embeds, contexts, hiddens = caption.embeds, caption.contexts, caption.hiddens
                 words_level1 = decode_captions(np.squeeze(np.asarray(sentence_level1)), level1.idx_to_word)[0].split(' ')
                 attrs_level2 = []

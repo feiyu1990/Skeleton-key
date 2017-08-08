@@ -18,21 +18,20 @@ class HierarchicalModel(object):
         self.level1_word2ix = json.load(open('data/train/word2ix_stem.json'))
         self.level2_word2ix = json.load(open('data/train/word2ix_attr.json'))
 
-        self.resnet = resnet.ResNet()
         self.level1_model = level1_model.Level1Model(word_to_idx=self.level1_word2ix,
                                                      dim_feature=config.LEVEL1_dim_feature,
                                                      dim_embed=config.LEVEL1_dim_embed,
                                                      dim_hidden=config.LEVEL1_dim_hidden,
                                                      alpha_c=config.LEVEL1_alpha, dropout=config.LEVEL1_dropout,
-                                                     n_time_step=config.LEVEL1_T)
+                                                     n_time_step=config.LEVEL1_T, train=(self.mode == 'training'))
 
         self.level2_model = level2_model.Level2Model(word_to_idx=self.level2_word2ix,
                                                      dim_feature=config.LEVEL2_dim_feature,
                                                      dim_embed=config.LEVEL2_dim_embed,
                                                      dim_hidden=config.LEVEL2_dim_hidden,
                                                      dropout=config.LEVEL2_dropout, n_time_step=config.LEVEL2_T)
+
     def build(self):
-        self.resnet.build_model(is_training=(self.mode == 'training'))
         self.level1_model.init_inference()
         self.level1_model.inference_1step()
         self.level1_model.inference_rest()

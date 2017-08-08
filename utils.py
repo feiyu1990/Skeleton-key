@@ -84,6 +84,8 @@ def decode_helper(captions, idx_to_word):
             if word == 'EOS':
                 # words.append('<END>')
                 break
+            if word == 'START':
+                continue
             if word != 'NULL':
                 words.append(word)
         words_all.append(words)

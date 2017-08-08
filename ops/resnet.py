@@ -59,16 +59,32 @@ class ResNet(object):
                                                initializer=tf.constant(params_init['running_mean']), trainable=False)
         moving_variance = self._get_variable_const('moving_variance',
                                                    initializer=tf.constant(params_init['running_var']), trainable=False)
-        mean, variance = tf.nn.moments(x, axis)
-        update_moving_mean = moving_averages.assign_moving_average(moving_mean, mean, BN_DECAY)
-        update_moving_variance = moving_averages.assign_moving_average(moving_variance, variance, BN_DECAY)
-        tf.add_to_collection(UPDATE_OPS_COLLECTION, update_moving_mean)
-        tf.add_to_collection(UPDATE_OPS_COLLECTION, update_moving_variance)
-        if ~is_training:
-            mean = moving_mean
-            variance = moving_variance
+        # mean, variance = tf.nn.moments(x, axis)
+        # update_moving_mean = moving_averages.assign_moving_average(moving_mean, mean, BN_DECAY)
+        # update_moving_variance = moving_averages.assign_moving_average(moving_variance, variance, BN_DECAY)
+        # tf.add_to_collection(UPDATE_OPS_COLLECTION, update_moving_mean)
+        # tf.add_to_collection(UPDATE_OPS_COLLECTION, update_moving_variance)
+        #
+        # if ~is_training:
+        #     mean = moving_mean
+        #     variance = moving_variance
+        # else:
+        #     ema = tf.train.ExponentialMovingAverage(decay=BN_DECAY)
+        #
+        #     def mean_var_with_update():
+        #         ema_apply_op = ema.apply([mean, variance])
+        #         with tf.control_dependencies([ema_apply_op]):
+        #             return tf.identity(mean), tf.identity(variance)
+        #     mean, variance = mean_var_with_update()
 
-        x = tf.nn.batch_normalization(x, mean, variance, beta, gamma, BN_EPSILON)
+        # mean, variance = control_flow_ops.cond(is_training, lambda: (mean, variance),
+        #                                        lambda: (moving_mean, moving_variance))
+        # x = tf.nn.batch_normalization(x, mean, variance, beta, gamma, BN_EPSILON)
+        x = tf.layers.batch_normalization(x, momentum=BN_DECAY, epsilon=BN_EPSILON, beta_initializer=tf.constant_initializer(params_init['bias']),
+                                          gamma_initializer=tf.constant_initializer(params_init['weight']),
+                                          moving_mean_initializer=tf.constant_initializer(params_init['running_mean']),
+                                          moving_variance_initializer=tf.constant_initializer(params_init['running_var']),
+                                          training=is_training)
         return x
 
     def _conv(self, x, params_init, stride):
@@ -149,7 +165,6 @@ class ResNet(object):
     def build_model(self, is_training):
         h = (self.images - np.array(IMAGENET_MEAN_RGB))
         h = tf.divide(h, 255)
-        self.testtest = h
         with tf.variable_scope('resnet/block1'):
             h = self._conv(x=h,
                            params_init={'bias': model_load['cnn1/bias'][:],
@@ -206,7 +221,21 @@ class ResNet(object):
             h = self._relu(h)
         self.features = h
 
-
+    def build_test(self):
+        with tf.variable_scope('resnet/block1'):
+            h = self._conv(x=self.images,
+                           params_init={'bias': model_load['cnn1/bias'][:],
+                                        'weight': np.transpose(model_load['cnn1/weight'][:], (2, 3, 1, 0))},
+                           stride=2)
+            h = self._bn(x=h,
+                         params_init={'bias': model_load['bn1/bias'][:],
+                                      'weight': model_load['bn1/weight'][:],
+                                      'running_mean': model_load['bn1/running_mean'][:],
+                                      'running_var': model_load['bn1/running_var'][:]},
+                         is_training=False)
+            # h = self._relu(h)
+            # h = self._pool(h)
+        self.features = h
 
 
 
